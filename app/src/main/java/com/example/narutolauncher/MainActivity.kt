@@ -87,7 +87,7 @@ fun App() {
     val pickFile = { picker.launch(arrayOf("*/*")) }
     val pickFolder = { treePicker.launch(null) }
 
-    val play = {
+    val play: () -> Unit = {
         val hasAll = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
         if (!hasAll) {
             Toast.makeText(ctx, "Allow access to all files, then press PLAY again.", Toast.LENGTH_LONG).show()
