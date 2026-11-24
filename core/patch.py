@@ -18,7 +18,7 @@ m = m.replace('android:authorities="org.ppsspp.ppsspp', 'android:authorities="co
 if "MANAGE_EXTERNAL_STORAGE" not in m:
     assert "<application" in m
     m = m.replace("<application", '<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n<application', 1)
-act = '''<activity android:name=".LauncherActivity" android:label="Naruto Launcher" android:exported="true"
+act = '''<activity android:name=".LauncherActivity" android:label="Naruto Launcher" android:icon="@mipmap/ic_naruto" android:exported="true"
     android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
     <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -29,6 +29,10 @@ act = '''<activity android:name=".LauncherActivity" android:label="Naruto Launch
 assert "</application>" in m
 m = m.replace("</application>", act + "</application>", 1)
 mf.write_text(m)
+
+# 2b) our icon resources
+if (here / "res").is_dir():
+    shutil.copytree(here / "res", app / "res", dirs_exist_ok=True)
 
 # 3) launcher screen source
 dst = app / "src" / "org" / "ppsspp" / "ppsspp"
