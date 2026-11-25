@@ -33,6 +33,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
+import android.webkit.WebViewClient;
 import android.webkit.WebView;
 import android.widget.CompoundButton;
 import android.widget.FrameLayout;
@@ -59,6 +60,7 @@ public class LauncherActivity extends Activity {
     static final String SAVE_ID = "ULUS10582", SAVE_DIR = "ULUS105820001", TRAILER_ID = "u8RFoYpdjCU";
     static final int ORANGE = 0xFFFF8A1F, ORANGE2 = 0xFFFFB44D, INK = 0xFFF6EDE3, MUTED = 0xFFA99A8A, DARK = 0xFF1A0D03,
             PANEL = 0xFF1B1626, EDGE = 0xFF5A3A1F, CELL = 0xFF120E1A;
+    static final float UI = 0.78f;   // global UI scale: lower = smaller menu
     static final int RQ_FILE = 1, RQ_TREE = 2, RQ_SAVE = 3, RQ_MOD = 4, RQ_DRV = 5;
 
     interface Pick { void on(int i); }
@@ -144,7 +146,7 @@ public class LauncherActivity extends Activity {
         row(col, btnPanel("Game save", saveInfo, "Import", new View.OnClickListener() { public void onClick(View v) { pickZip(RQ_SAVE); } }),
                  btnPanel("GPU driver", drvInfo, "Change", new View.OnClickListener() { public void onClick(View v) { driverDialog(); } }));
         gap(col, btnPanel("Mods (textures)", modInfo, "Install", new View.OnClickListener() { public void onClick(View v) { pickZip(RQ_MOD); } }), 10);
-        TextView note = text("Config: " + psp().getPath(), 11, MUTED, false); gap(col, note, 12);
+        TextView note = text("Data folder: " + psp().getPath(), 11, MUTED, false); gap(col, note, 12);
 
         if (land) {
             LinearLayout h = new LinearLayout(this); h.setOrientation(LinearLayout.HORIZONTAL); h.setPadding(dp(30), dp(14), dp(30), dp(14)); h.setBackground(bgGradient());
@@ -254,6 +256,9 @@ public class LauncherActivity extends Activity {
                 File d = new File(f, "DATA.BIN");
                 s = "Current save: " + (d.length() / 1024) + " KB \u00B7 " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm").format(new java.util.Date(d.lastModified()));
             }
+            StringBuilder nm = new StringBuilder();
+            if (fs != null) for (File f : fs) if (f.isDirectory()) nm.append(nm.length() > 0 ? ", " : "").append(f.getName());
+            if (nm.length() > 0) s += "\n" + nm;
             saveInfo.setText(s);
         }
     }
@@ -332,7 +337,16 @@ public class LauncherActivity extends Activity {
     }
 
     // ---------------------------------------------------------------- files / installers
-    File psp() { File b = getExternalFilesDir(null); return new File(b != null ? b : getFilesDir(), "PSP"); }
+    /** PPSSPP's data folder: the path PPSSPP stored in memstick_dir.txt if any, else the app's own external files dir. */
+    File psp() {
+        File ms = null;
+        try {
+            File f = new File(getFilesDir(), "memstick_dir.txt");
+            if (f.exists()) { String p = readAll(f).trim(); if (p.startsWith("/") && new File(p).isDirectory()) ms = new File(p); }
+        } catch (Exception e) { }
+        if (ms == null) { File b = getExternalFilesDir(null); ms = b != null ? b : getFilesDir(); }
+        return new File(ms, "PSP");
+    }
     File drvRoot() { return new File(getFilesDir(), "drivers"); }
 
     String installMod(Uri u) throws IOException {
@@ -470,6 +484,7 @@ public class LauncherActivity extends Activity {
             setIni(new File(sys, "ppsspp.ini"), "Graphics", "GraphicsBackend", "3 (VULKAN)");
         } catch (IOException e) { toast("Could not write config: " + e.getMessage()); return; }
         Intent i = new Intent(this, PpssppActivity.class); i.setAction(Intent.ACTION_VIEW); i.addCategory(Intent.CATEGORY_DEFAULT);
+        i.putExtra("org.ppsspp.ppsspp.Args", "--pause-menu-exit");
         if (gamePath != null) i.setData(Uri.parse(gamePath));
         else { i.setDataAndType(Uri.parse(gameUri), "application/octet-stream"); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); }
         startActivity(i);
@@ -483,10 +498,9 @@ public class LauncherActivity extends Activity {
         final WebView w = new WebView(this); WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setMediaPlaybackRequiresUserGesture(false);
         w.setWebChromeClient(new WebChromeClient());
-        String html = "<html><body style=\"margin:0;background:#000\"><iframe style=\"position:absolute;top:0;left:0;width:100%;height:100%\" "
-            + "src=\"https://www.youtube.com/embed/" + TRAILER_ID + "?autoplay=1&playsinline=1&rel=0\" frameborder=\"0\" "
-            + "allow=\"autoplay; encrypted-media; picture-in-picture; fullscreen\" allowfullscreen></iframe></body></html>";
-        w.loadDataWithBaseURL("https://" + getPackageName(), html, "text/html", "utf-8", null);
+        s.setUserAgentString("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+        w.setWebViewClient(new WebViewClient());
+        w.loadUrl("https://m.youtube.com/watch?v=" + TRAILER_ID);
         f.addView(w, new FrameLayout.LayoutParams(-1, -1));
         TextView x = text("\u2715", 22, INK, true); x.setPadding(dp(18), dp(10), dp(18), dp(10)); x.setBackgroundColor(0x99000000);
         x.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { d.dismiss(); } });
@@ -578,10 +592,10 @@ public class LauncherActivity extends Activity {
     static long le32(byte[] b, int o) { return (le16(b, o) & 0xFFFFL) | ((long) le16(b, o + 2) << 16); }
 
     // ---------------------------------------------------------------- small UI helpers
-    int dp(float v) { return (int) (v * dens + 0.5f); }
+    int dp(float v) { return (int) (v * dens * UI + 0.5f); }
     void toast(final String s) { runOnUiThread(new Runnable() { public void run() { Toast.makeText(LauncherActivity.this, s, Toast.LENGTH_LONG).show(); } }); }
     TextView text(String s, int size, int color, boolean bold) {
-        TextView t = new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(color);
+        TextView t = new TextView(this); t.setText(s); t.setTextSize(size * UI); t.setTextColor(color);
         if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
         return t;
     }
@@ -595,7 +609,7 @@ public class LauncherActivity extends Activity {
     static class Shape extends TextView {
         final int mode; final Path path = new Path(); final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
         Shape(Context c, String t, int mode, float sp) {
-            super(c); this.mode = mode; setText(t); setTextColor(DARK); setTextSize(sp); setTypeface(Typeface.DEFAULT_BOLD);
+            super(c); this.mode = mode; setText(t); setTextColor(DARK); setTextSize(sp * UI); setTypeface(Typeface.DEFAULT_BOLD);
             setGravity(Gravity.CENTER); setClickable(true);
         }
         @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
@@ -612,7 +626,7 @@ public class LauncherActivity extends Activity {
         final String[] o; int sel; final Pick cb; final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG), t = new Paint(Paint.ANTI_ALIAS_FLAG),
             s2 = new Paint(Paint.ANTI_ALIAS_FLAG); final Path path = new Path(); final float d;
         Seg(Context c, String[] o, int sel, Pick cb) {
-            super(c); this.o = o; this.sel = sel; this.cb = cb; d = c.getResources().getDisplayMetrics().density;
+            super(c); this.o = o; this.sel = sel; this.cb = cb; d = c.getResources().getDisplayMetrics().density * UI;
             t.setTextAlign(Paint.Align.CENTER); t.setTypeface(Typeface.DEFAULT_BOLD); t.setTextSize(14 * d);
             s2.setTextAlign(Paint.Align.CENTER); s2.setTextSize(10 * d);
         }

@@ -20,6 +20,11 @@ jobs:
         run: ls ppsspp && ls ppsspp/android
       - name: Patch (app id, launcher screen)
         run: python3 core/patch.py ppsspp
+      - name: Keep the same signing key between builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
       - name: Build
         working-directory: ppsspp
         run: bash ./gradlew assembleNormalOptimized --stacktrace
