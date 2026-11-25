@@ -16,6 +16,8 @@ jobs:
         with:
           distribution: zulu
           java-version: '17'
+      - name: Show layout
+        run: ls ppsspp && ls ppsspp/android
       - name: Patch (app id, launcher screen)
         run: python3 core/patch.py ppsspp
       - name: Build
