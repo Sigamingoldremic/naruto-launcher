@@ -67,9 +67,9 @@ public class LauncherActivity extends Activity {
 
     SharedPreferences sp; float dens; boolean land;
     String gameUri, gamePath, discId, gameName, drv;
-    int res = 2, msaa = 0, tex = 1, opacity = 65;
+    int res = 2, msaa = 0, tex = 1, opacity = 65, hide = 20;
     boolean stretch = true, skipBuf = true, fps = true, autoSkip = false, full = false, busy = false;
-    TextView status, saveInfo, drvInfo, modInfo; Switch lastSw, fullSw;
+    TextView status, saveInfo, drvInfo, modInfo; Switch lastSw, fullSw; AlertDialog setupDialog;
 
     // ---------------------------------------------------------------- lifecycle
     @Override protected void onCreate(Bundle b) {
@@ -77,7 +77,7 @@ public class LauncherActivity extends Activity {
         sp = getSharedPreferences("launcher", 0);
         gameUri = sp.getString("uri", null); gamePath = sp.getString("path", null);
         discId = sp.getString("id", null); gameName = sp.getString("name", null); drv = sp.getString("drv", null);
-        res = sp.getInt("res", 2); msaa = sp.getInt("msaa", 0); tex = sp.getInt("tex", 1); opacity = sp.getInt("op", 65);
+        res = sp.getInt("res", 2); msaa = sp.getInt("msaa", 0); tex = sp.getInt("tex", 1); opacity = sp.getInt("op", 65); hide = sp.getInt("hide", 20);
         stretch = sp.getBoolean("st", true); skipBuf = sp.getBoolean("sb", true);
         fps = sp.getBoolean("fps", true); autoSkip = sp.getBoolean("as", false); full = sp.getBoolean("full", false);
         dens = getResources().getDisplayMetrics().density;
@@ -91,7 +91,7 @@ public class LauncherActivity extends Activity {
     }
 
     @Override public void onWindowFocusChanged(boolean f) { super.onWindowFocusChanged(f); if (f) hideBars(); }
-    @Override protected void onResume() { super.onResume(); refreshInfo(); }
+    @Override protected void onResume() { super.onResume(); maybeSetup(); refreshInfo(); }
     void hideBars() {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
             | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -99,7 +99,7 @@ public class LauncherActivity extends Activity {
 
     void save() {
         sp.edit().putInt("res", res).putInt("msaa", msaa).putInt("tex", tex).putBoolean("st", stretch).putBoolean("sb", skipBuf)
-            .putInt("op", opacity).putBoolean("fps", fps).putBoolean("as", autoSkip).putBoolean("full", full).putString("uri", gameUri).putString("path", gamePath)
+            .putInt("op", opacity).putInt("hide", hide).putBoolean("fps", fps).putBoolean("as", autoSkip).putBoolean("full", full).putString("uri", gameUri).putString("path", gamePath)
             .putString("id", discId).putString("name", gameName).putString("drv", drv).apply();
     }
 
@@ -134,7 +134,7 @@ public class LauncherActivity extends Activity {
                  segPanel("Anti-aliasing", new String[]{"Off", "MSAA 2x", "MSAA 4x"}, msaa == 2 ? 1 : msaa == 4 ? 2 : 0,
                      new Pick() { public void on(int i) { msaa = i * 2; save(); } }));
         row(col, segPanel("Texture scaling", new String[]{"Off", "xBRZ 2x", "xBRZ 3x"}, tex - 1, new Pick() { public void on(int i) { tex = i + 1; save(); } }),
-                 sliderPanel("Button opacity", 0, 100, opacity, new Pick() { public void on(int i) { opacity = i; save(); } }));
+                 touchPanel());
 
         LinearLayout t1 = togPanel("Performance", "skip buffer effects", skipBuf, new Pick() { public void on(int i) { skipBuf = i == 1; save(); } });
         LinearLayout t2 = togPanel("FPS overlay", "show FPS counter", fps, new Pick() { public void on(int i) { fps = i == 1; save(); } });
@@ -205,18 +205,32 @@ public class LauncherActivity extends Activity {
     LinearLayout segPanel(String title, String[] o, int sel, Pick cb) {
         LinearLayout p = panel(title); p.addView(new Seg(this, o, sel, cb), lp(-1, dp(50), 0, 8)); return p;
     }
-    LinearLayout sliderPanel(String title, final int min, int max, int val, final Pick cb) {
-        LinearLayout p = panel(title); LinearLayout r = new LinearLayout(this); r.setGravity(Gravity.CENTER_VERTICAL);
-        final TextView v = text(val + "%", 14, INK, true); v.setMinWidth(dp(52)); v.setGravity(Gravity.END);
+    LinearLayout touchPanel() {
+        LinearLayout p = panel("Touch buttons");
+        addSlider(p, "Opacity", 0, 100, opacity, "%", new Pick() { public void on(int i) { opacity = i; save(); } });
+        addSlider(p, "Auto-hide after", 0, 60, hide, " s", new Pick() { public void on(int i) { hide = i; save(); } });
+        return p;
+    }
+    void addSlider(LinearLayout p, String label, final int min, int max, int val, final String unit, final Pick cb) {
+        p.addView(text(label, 12, MUTED, false), lp(-1, -2, 0, 8));
+        LinearLayout r = new LinearLayout(this); r.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView v = text(fmt(val, unit), 13, INK, true); v.setMinWidth(dp(56)); v.setGravity(Gravity.END);
         SeekBar sb = new SeekBar(this); sb.setMax(max - min); sb.setProgress(val - min);
         if (Build.VERSION.SDK_INT >= 21) { sb.setProgressTintList(ColorStateList.valueOf(ORANGE)); sb.setThumbTintList(ColorStateList.valueOf(ORANGE2)); }
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(SeekBar s, int pr, boolean u) { v.setText((pr + min) + "%"); cb.on(pr + min); }
+            public void onProgressChanged(SeekBar s, int pr, boolean u) { v.setText(fmt(pr + min, unit)); cb.on(pr + min); }
             public void onStartTrackingTouch(SeekBar s) { }
             public void onStopTrackingTouch(SeekBar s) { }
         });
-        r.addView(sb, new LinearLayout.LayoutParams(0, -2, 1)); r.addView(v); p.addView(r, lp(-1, -2, 0, 10)); return p;
+        sb.setOnTouchListener(new View.OnTouchListener() { public boolean onTouch(View view, MotionEvent e) {   // keep the parent ScrollView from stealing the drag
+            int a = e.getAction();
+            if (a == MotionEvent.ACTION_DOWN || a == MotionEvent.ACTION_MOVE) view.getParent().requestDisallowInterceptTouchEvent(true);
+            else if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) view.getParent().requestDisallowInterceptTouchEvent(false);
+            return false;
+        } });
+        r.addView(sb, new LinearLayout.LayoutParams(0, -2, 1)); r.addView(v); p.addView(r, lp(-1, -2, 0, 2));
     }
+    static String fmt(int v, String unit) { return v == 0 && unit.equals(" s") ? "off" : v + unit; }
     LinearLayout togPanel(String title, String sub, boolean on, final Pick cb) {
         LinearLayout p = panel(title); LinearLayout r = new LinearLayout(this); r.setGravity(Gravity.CENTER_VERTICAL);
         r.addView(text(sub, 12, MUTED, false), new LinearLayout.LayoutParams(0, -2, 1));
@@ -345,7 +359,7 @@ public class LauncherActivity extends Activity {
             if (f.exists()) { String p = readAll(f).trim(); if (p.startsWith("/") && new File(p).isDirectory()) ms = new File(p); }
         } catch (Exception e) { }
         if (ms == null) { File b = getExternalFilesDir(null); ms = b != null ? b : getFilesDir(); }
-        return new File(ms, "PSP");
+        return "PSP".equals(ms.getName()) ? ms : new File(ms, "PSP");
     }
     File drvRoot() { return new File(getFilesDir(), "drivers"); }
 
@@ -405,9 +419,7 @@ public class LauncherActivity extends Activity {
         try {
             if (on) {
                 if (sd.exists() && !bak.exists()) { bak.getParentFile().mkdirs(); if (!sd.renameTo(bak)) del(sd); } else del(sd);
-                sd.mkdirs();
-                raw("save_data", new File(sd, "DATA.BIN")); raw("save_icon0", new File(sd, "ICON0.PNG"));
-                raw("save_param", new File(sd, "PARAM.SFO")); raw("save_pic1", new File(sd, "PIC1.PNG"));
+                installBundledSave(sd);
                 toast("100% save installed. Your previous save is backed up.");
             } else {
                 del(sd); if (bak.exists()) bak.renameTo(sd);
@@ -420,6 +432,49 @@ public class LauncherActivity extends Activity {
         int id = getResources().getIdentifier(name, "raw", getPackageName());
         if (id == 0) throw new IOException("missing resource " + name);
         InputStream in = getResources().openRawResource(id); try { out.getParentFile().mkdirs(); copy(in, out); } finally { in.close(); }
+    }
+
+    // ---------------------------------------------------------------- first-run setup: PSP folder + starter save
+    static final String[] PSP_DIRS = {"GAME", "SAVEDATA", "SYSTEM", "TEXTURES", "PPSSPP_STATE", "CHEATS", "VIDEO", "SCREENSHOT"};
+
+    void installBundledSave(File sd) throws IOException {
+        sd.mkdirs();
+        raw("save_data", new File(sd, "DATA.BIN")); raw("save_icon0", new File(sd, "ICON0.PNG"));
+        raw("save_param", new File(sd, "PARAM.SFO")); raw("save_pic1", new File(sd, "PIC1.PNG"));
+    }
+
+    void maybeSetup() {
+        if (sp.getBoolean("setup", false) || (setupDialog != null && setupDialog.isShowing())) return;
+        if (new File(getFilesDir(), "memstick_dir.txt").exists()) { setupData(false); return; }   // PPSSPP already has a data folder: use it
+        if (hasAll()) { setupData(true); return; }
+        setupDialog = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setCancelable(false)
+            .setTitle("First-time setup")
+            .setMessage("The app creates a PSP folder in your storage (saves, mods, textures) and installs the starter save. It needs \"All files access\".")
+            .setPositiveButton("Allow", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) {
+                startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName()))); } })
+            .setNegativeButton("Skip", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int w) { setupData(false); } })
+            .show();
+    }
+
+    /** shared = true: data folder is /storage/emulated/0/PSP (visible, survives uninstall). false: app-private folder. */
+    void setupData(boolean shared) {
+        try {
+            File mf = new File(getFilesDir(), "memstick_dir.txt");
+            if (!mf.exists()) {   // tell PPSSPP where its data lives (this also skips its own storage question)
+                File base = shared ? Environment.getExternalStorageDirectory() : getExternalFilesDir(null);
+                if (base == null) base = getFilesDir();
+                base.mkdirs();
+                FileOutputStream o = new FileOutputStream(mf); o.write(base.getPath().getBytes("UTF-8")); o.close();
+            }
+            File p = psp();
+            for (String d : PSP_DIRS) new File(p, d).mkdirs();
+            String msg = "PSP folder ready: " + p.getPath();
+            File sd = new File(p, "SAVEDATA/" + SAVE_DIR);
+            if (!sd.exists()) { installBundledSave(sd); full = true; msg += "\nStarter save installed."; }
+            sp.edit().putBoolean("setup", true).apply(); save();
+            toast(msg);
+            if (discId != null) showMain();
+        } catch (Exception e) { toast("Setup failed: " + e.getMessage()); }
     }
 
     // ---------------------------------------------------------------- GPU driver (AdrenoTools, handled by PPSSPP itself)
@@ -478,7 +533,10 @@ public class LauncherActivity extends Activity {
                 {"iShowStatusFlags", fps ? "2" : "0"}, {"DisplayStretch", b(stretch)} };
             for (String[] p : kv) setIni(g, "Graphics", p[0], p[1]);
             setIni(g, "Control", "TouchButtonOpacity", "" + opacity);
+            setIni(g, "Control", "TouchButtonHideSeconds", "" + hide);
             File gi = new File(sys, "ppsspp.ini");
+            setIni(gi, "Control", "TouchButtonOpacity", "" + opacity);        // also global, in case this PPSSPP version keeps it there
+            setIni(gi, "Control", "TouchButtonHideSeconds", "" + hide);
             setIni(gi, "General", "PauseMenuExitsEmulator", "True");   // Exit in the pause menu closes the emulator -> back to this launcher
             setIni(gi, "General", "ScreenRotation", "1");               // landscape
             setIni(new File(sys, "ppsspp.ini"), "Graphics", "GraphicsBackend", "3 (VULKAN)");
